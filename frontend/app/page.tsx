@@ -258,7 +258,7 @@ export default function Home() {
                 <Link key={product.id} href={`${ROUTES.PRODUCTS}/${product.id}`} className="group">
                   <div className="bg-white border border-gray-200 rounded-lg overflow-hidden hover:shadow-lg transition-shadow">
                     {/* Product Image */}
-                    <div className="relative aspect-square bg-gray-50 overflow-hidden">
+                    <div className="relative aspect-square bg-gray-50 overflow-hidden flex items-center justify-center">
                       {hasDiscount && (
                         <span className="absolute top-3 right-3 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded z-10">
                           UP TO -{product.discount_percentage}%
@@ -273,7 +273,7 @@ export default function Home() {
                         <img
                           src={imageUrl}
                           alt={product.name}
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                          className="w-full h-full object-contain p-4 group-hover:scale-105 transition-transform duration-300"
                         />
                       ) : (
                         <div className="flex items-center justify-center h-full">
