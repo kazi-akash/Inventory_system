@@ -1,0 +1,46 @@
+# Documentation
+*.md
+*.txt
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+.env*.local
+
+# Dependencies (will be installed in container)
+node_modules
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+
+# Build outputs
+.next
+out
+build
+dist
+
+# Testing
+coverage
+.nyc_output
+.pytest_cache
+
+# Misc
+.cache

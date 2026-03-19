@@ -1,0 +1,148 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: inventory_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: inventory_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - inventory_network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: inventory_redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - inventory_network
+
+  # RabbitMQ Message Queue
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: inventory_rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"
+      - "15672:15672"  # Management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - inventory_network
+
+  # FastAPI Application
+  api:
+    build:
+      context: ./backend/backend
+      dockerfile: Dockerfile
+    container_name: inventory_api
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        sleep 5 &&
+        echo 'Running migrations...' &&
+        alembic upgrade head &&
+        echo 'Starting API server...' &&
+        uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+      "
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/inventory_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      SECRET_KEY: your-secret-key-change-in-production-please-use-strong-key
+      DEBUG: "True"
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    volumes:
+      - ./backend/backend:/app
+      - product_uploads:/app/uploads
+    networks:
+      - inventory_network
+
+  # Background Worker - Expiration Handler
+  worker_expiration:
+    build:
+      context: ./backend/backend
+      dockerfile: Dockerfile
+    container_name: inventory_worker_expiration
+    command: python -m app.workers.expiration_handler
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/inventory_db
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SECRET_KEY: your-secret-key-change-in-production-please-use-strong-key
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      api:
+        condition: service_started
+    volumes:
+      - ./backend/backend:/app
+    networks:
+      - inventory_network
+    restart: unless-stopped
+
+  # Next.js Frontend (Development with hot-reload)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: inventory_frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000/api/v1
+      NEXT_PUBLIC_BACKEND_URL: http://localhost:8000
+      NEXT_PUBLIC_APP_NAME: Flash Sale System
+      NEXT_PUBLIC_RESERVATION_EXPIRY_MINUTES: 5
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - inventory_network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  product_uploads:
+
+networks:
+  inventory_network:
+    driver: bridge
