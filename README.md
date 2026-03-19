@@ -356,25 +356,26 @@ chmod +x docker-commands.sh
 ```
 .
 ├── backend/                 # FastAPI backend
-│   ├── app/
-│   │   ├── api/            # API endpoints
-│   │   ├── models/         # Database models
-│   │   ├── services/       # Business logic
-│   │   └── workers/        # Background workers
-│   ├── Dockerfile
-│   └── requirements.txt
+│   ├── backend/            # Main application code
+│   │   ├── app/           # API endpoints, models, services
+│   │   ├── alembic/       # Database migrations
+│   │   ├── Dockerfile     # Backend container config
+│   │   └── requirements.txt
+│   └── docker-compose.yml  # Backend-specific compose
 │
 ├── frontend/               # Next.js frontend
 │   ├── app/               # App router pages
 │   ├── components/        # React components
 │   ├── lib/              # Utilities and API client
-│   ├── Dockerfile
-│   ├── Dockerfile.dev
+│   ├── Dockerfile        # Production build
+│   ├── Dockerfile.dev    # Development build
 │   └── package.json
 │
 ├── docker-compose.yml      # Production config
 ├── docker-compose.dev.yml  # Development config
-└── DOCKER_SETUP.md        # Detailed Docker guide
+├── docker-commands.ps1     # Windows helper script
+├── docker-commands.sh      # Linux/Mac helper script
+└── README.md              # This file
 ```
 
 ## Technology Stack
@@ -423,8 +424,11 @@ npm install package-name
 ## Common Commands
 
 ```bash
-# Start services
+# Start services (production)
 docker-compose up -d
+
+# Start services (development with hot-reload)
+docker-compose -f docker-compose.dev.yml up -d
 
 # Stop services
 docker-compose down
@@ -432,17 +436,52 @@ docker-compose down
 # View logs
 docker-compose logs -f
 
-# Rebuild specific service
-docker-compose up --build frontend
+# View specific service logs
+docker logs inventory_api
+docker logs inventory_frontend
 
-# Reset database
+# Rebuild and restart
+docker-compose up -d --build
+
+# Check service status
+docker-compose ps
+
+# Reset database (removes all data)
 docker-compose down -v
 docker-compose up --build
 ```
 
+### Using Helper Scripts
+
+**Windows (PowerShell):**
+```powershell
+# Start development mode
+.\docker-commands.ps1 -Command start-dev
+
+# View logs
+.\docker-commands.ps1 -Command logs -Service frontend
+
+# Stop all services
+.\docker-commands.ps1 -Command stop
+```
+
+**Linux/Mac (Bash):**
+```bash
+# Make script executable (first time only)
+chmod +x docker-commands.sh
+
+# Start development mode
+./docker-commands.sh start-dev
+
+# View logs
+./docker-commands.sh logs frontend
+
+# Stop all services
+./docker-commands.sh stop
+```
+
 ## Documentation
 
-- [Docker Setup Guide](DOCKER_SETUP.md) - Comprehensive Docker documentation
 - [Backend Documentation](backend/README.md) - Backend API details
 - [Frontend Documentation](frontend/README.md) - Frontend architecture
 
