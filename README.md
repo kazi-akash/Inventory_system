@@ -2,6 +2,36 @@
 
 Full-stack inventory management system with real-time reservations, built with FastAPI (backend) and Next.js (frontend).
 
+## 🚀 Quick Start
+
+### Prerequisites
+- Docker Desktop installed and running
+- Git
+
+### Running the Application
+
+```bash
+# Clone the repository
+git clone https://github.com/kazi-akash/Inventory_system.git
+cd Inventory_system
+
+# Start all services
+docker-compose up -d
+
+# Check service status
+docker-compose ps
+```
+
+### Access Points
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+- **RabbitMQ Management**: http://localhost:15672 (guest/guest)
+
+### Test Accounts
+- **Admin**: admin@example.com / admin123
+- **User**: user@example.com / user123
+
 ## System Architecture
 
 ### Overview
