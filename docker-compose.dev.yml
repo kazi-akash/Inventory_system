@@ -63,6 +63,8 @@ services:
         sleep 5 &&
         echo 'Running migrations...' &&
         alembic upgrade head &&
+        echo 'Seeding database...' &&
+        python scripts/seed_data.py || echo 'Seed data already exists or failed' &&
         echo 'Starting API server...' &&
         uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
       "

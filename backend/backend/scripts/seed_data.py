@@ -20,6 +20,13 @@ async def seed_database():
     
     async with AsyncSessionLocal() as db:
         try:
+            # Check if data already exists
+            from sqlalchemy import select
+            result = await db.execute(select(User).limit(1))
+            if result.scalar_one_or_none():
+                print("⚠ Database already seeded, skipping...")
+                return
+            
             # Create admin user
             admin = User(
                 email="admin@example.com",
