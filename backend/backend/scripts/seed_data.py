@@ -52,7 +52,7 @@ async def seed_database():
                 Product(
                     name="iPhone 15 Pro",
                     price=999.99,
-                    image_url="https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=500",
+                    image_url="/uploads/seeder file images/iphone 15.webp",
                     short_description="Latest iPhone with A17 Pro chip and titanium design",
                     description="The iPhone 15 Pro features a stunning titanium design, powerful A17 Pro chip, advanced camera system with 48MP main camera, and Action button for quick access to your favorite features. Available in natural titanium, blue titanium, white titanium, and black titanium.",
                     total_inventory=100,
@@ -63,7 +63,7 @@ async def seed_database():
                 Product(
                     name="Samsung Galaxy S24",
                     price=899.99,
-                    image_url="https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=500",
+                    image_url="/uploads/seeder file images/s25.jpg",
                     short_description="AI-powered smartphone with stunning display",
                     description="Samsung Galaxy S24 brings Galaxy AI to your fingertips with advanced photo editing, real-time translation, and smart features. Features a 6.2-inch Dynamic AMOLED display, Snapdragon 8 Gen 3 processor, and versatile triple camera system.",
                     total_inventory=50,
@@ -74,7 +74,7 @@ async def seed_database():
                 Product(
                     name="MacBook Pro M3",
                     price=1999.99,
-                    image_url="https://images.unsplash.com/photo-1517336714731-489689fd1ca8?w=500",
+                    image_url="/uploads/seeder file images/macbook pro.jpg",
                     short_description="Supercharged for pros with M3 chip",
                     description="The 14-inch MacBook Pro with M3 chip delivers exceptional performance and battery life. Features a stunning Liquid Retina XDR display, up to 22 hours of battery life, and a complete array of ports. Perfect for developers, designers, and content creators.",
                     total_inventory=30,
@@ -85,7 +85,7 @@ async def seed_database():
                 Product(
                     name="Sony WH-1000XM5",
                     price=399.99,
-                    image_url="https://images.unsplash.com/photo-1618366712010-f4ae9c647dcb?w=500",
+                    image_url="/uploads/seeder file images/headphone.jpg",
                     short_description="Industry-leading noise canceling headphones",
                     description="Sony WH-1000XM5 wireless headphones deliver premium sound quality with industry-leading noise cancellation. Features 30-hour battery life, multipoint connection, speak-to-chat technology, and exceptional comfort for all-day wear.",
                     total_inventory=200,
@@ -96,7 +96,7 @@ async def seed_database():
                 Product(
                     name="iPad Air",
                     price=599.99,
-                    image_url="https://images.unsplash.com/photo-1544244015-0df4b3ffc6b0?w=500",
+                    image_url="/uploads/seeder file images/ipad.jpg",
                     short_description="Powerful, colorful, and versatile",
                     description="iPad Air features the powerful M1 chip, stunning 10.9-inch Liquid Retina display, and works with Apple Pencil and Magic Keyboard. Available in space gray, starlight, pink, purple, and blue. Perfect for creativity, productivity, and entertainment.",
                     total_inventory=75,
