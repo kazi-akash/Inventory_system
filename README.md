@@ -1,538 +1,304 @@
 # Inventory Reservation System
 
-Full-stack inventory management system with real-time reservations, built with FastAPI (backend) and Next.js (frontend).
+A high-performance inventory management platform with real-time reservation capabilities. Built to handle flash sales and high-traffic scenarios with proper concurrency control.
 
-## 🚀 Quick Start
+## Stack
 
-### Prerequisites
-- Docker Desktop installed and running
-- Git
+**Backend:** FastAPI, PostgreSQL, Redis, RabbitMQ  
+**Frontend:** Next.js 15, TypeScript, Tailwind CSS  
+**Infrastructure:** Docker, Docker Compose
 
-### Running the Application
+## Getting Started
 
 ```bash
-# Clone the repository
 git clone https://github.com/kazi-akash/Inventory_system.git
 cd Inventory_system
-
-# Start all services
 docker-compose up -d
-
-# Check service status
-docker-compose ps
 ```
 
-### Access Points
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Documentation**: http://localhost:8000/docs
-- **RabbitMQ Management**: http://localhost:15672 (guest/guest)
+The app will be available at:
+- Frontend: http://localhost:3000
+- API: http://localhost:8000
+- API Docs: http://localhost:8000/docs
+- RabbitMQ UI: http://localhost:15672 (guest/guest)
 
-### Test Accounts
-- **Admin**: admin@example.com / admin123
-- **User**: user@example.com / user123
+Test credentials:
+- Admin: `admin@example.com` / `admin123`
+- User: `user@example.com` / `user123`
 
-## System Architecture
-
-### Overview
-The system follows a microservices-inspired architecture with the following components:
+## Architecture
 
 ```
-┌─────────────┐      ┌──────────────┐      ┌─────────────┐
-│   Next.js   │─────▶│   FastAPI    │─────▶│ PostgreSQL  │
-│  Frontend   │      │   Backend    │      │  Database   │
-│  (Port 3000)│      │  (Port 8000) │      │ (Port 5432) │
-└─────────────┘      └──────────────┘      └─────────────┘
-                            │
-                            ├─────────────┐
-                            │             │
-                     ┌──────▼─────┐  ┌───▼────────┐
-                     │   Redis    │  │ RabbitMQ   │
-                     │   Cache    │  │   Queue    │
-                     │(Port 6379) │  │(Port 5672) │
-                     └────────────┘  └────────────┘
-                                           │
-                                     ┌─────▼──────┐
-                                     │  Worker    │
-                                     │  Process   │
-                                     └────────────┘
+┌──────────┐      ┌──────────┐      ┌──────────┐
+│  Next.js │─────▶│  FastAPI │─────▶│ Postgres │
+│  :3000   │      │  :8000   │      │  :5432   │
+└──────────┘      └──────────┘      └──────────┘
+                       │
+                       ├──────┬──────┐
+                       │      │      │
+                   ┌───▼──┐ ┌─▼───┐ ┌▼──────┐
+                   │Redis │ │RMQ  │ │Worker │
+                   │:6379 │ │:5672│ └───────┘
+                   └──────┘ └─────┘
 ```
 
-### Components
+### Why This Stack?
 
-1. **Frontend (Next.js)**
-   - Server-side rendering for optimal performance
-   - Real-time UI updates with SWR
-   - Responsive design with Tailwind CSS
-   - Type-safe API integration with TypeScript
+**FastAPI** - Async by default, handles 10k+ concurrent connections per instance. Built-in OpenAPI docs.
 
-2. **Backend (FastAPI)**
-   - RESTful API with automatic OpenAPI documentation
-   - Async/await for high concurrency
-   - JWT-based authentication
-   - Database connection pooling
+**PostgreSQL** - ACID transactions prevent overselling. Row-level locking with `SELECT FOR UPDATE`.
 
-3. **Database (PostgreSQL)**
-   - ACID-compliant transactions
-   - Async queries with asyncpg
-   - Alembic migrations for schema management
+**Redis** - Distributed locks across multiple backend instances. Sub-millisecond cache lookups.
 
-4. **Cache (Redis)**
-   - Session storage
-   - Distributed locking for race condition prevention
-   - Temporary reservation data
+**RabbitMQ** - Decouples reservation processing. Automatic retries on failure.
 
-5. **Message Queue (RabbitMQ)**
-   - Asynchronous task processing
-   - Reservation expiration handling
-   - Decoupled worker processes
+## Handling Race Conditions
 
-6. **Background Workers**
-   - Expiration handler for timed-out reservations
-   - Automatic inventory restoration
+The main challenge: preventing overselling when multiple users reserve the same product simultaneously.
 
-## Race Condition Handling Strategy
+### Multi-Layer Approach
 
-### Problem
-In high-traffic scenarios, multiple users may attempt to reserve the same product simultaneously, potentially causing:
-- Overselling (selling more than available stock)
-- Double reservations
-- Inconsistent inventory counts
-
-### Solution: Multi-Layer Protection
-
-#### 1. Database-Level Protection
+**1. Redis Distributed Lock**
 ```python
-# Pessimistic locking with SELECT FOR UPDATE
+lock_key = f"product_lock:{product_id}"
+async with redis.lock(lock_key, timeout=5):
+    await reserve_product(product_id, quantity)
+```
+Fast initial validation. Works across multiple backend instances.
+
+**2. Database Row Lock**
+```python
 async with session.begin():
     product = await session.execute(
         select(Product)
         .where(Product.id == product_id)
-        .with_for_update()  # Row-level lock
+        .with_for_update()
     )
     if product.stock >= quantity:
         product.stock -= quantity
 ```
+ACID guarantees. Automatic rollback on failure.
 
-**Benefits:**
-- Prevents concurrent modifications at database level
-- ACID transaction guarantees
-- Automatic rollback on failure
-
-#### 2. Redis Distributed Locking
+**3. Optimistic Locking**
 ```python
-# Distributed lock for critical sections
-lock_key = f"product_lock:{product_id}"
-async with redis.lock(lock_key, timeout=5):
-    # Critical section - only one process at a time
-    await reserve_product(product_id, quantity)
-```
-
-**Benefits:**
-- Works across multiple backend instances
-- Prevents race conditions in distributed systems
-- Automatic lock expiration prevents deadlocks
-
-#### 3. Optimistic Locking with Version Control
-```python
-# Version-based concurrency control
 class Product(Base):
     version = Column(Integer, default=0)
-    
-# Update only if version matches
+
 result = await session.execute(
     update(Product)
     .where(Product.id == id, Product.version == old_version)
     .values(stock=new_stock, version=old_version + 1)
 )
-if result.rowcount == 0:
-    raise ConcurrentModificationError()
 ```
+Detects concurrent modifications. Lower contention than pessimistic locking.
 
-**Benefits:**
-- Detects concurrent modifications
-- Retry mechanism for failed updates
-- Lower lock contention than pessimistic locking
-
-#### 4. Queue-Based Processing
+**4. Queue Processing**
 ```python
-# Serialize reservation requests through RabbitMQ
 await queue.publish(ReservationRequest(
     product_id=product_id,
     user_id=user_id,
     quantity=quantity
 ))
 ```
+Sequential processing. Natural rate limiting.
 
-**Benefits:**
-- Sequential processing of reservations
-- Natural rate limiting
-- Prevents thundering herd problem
+This layered approach ensures consistency even under extreme load.
 
-### Combined Strategy
-The system uses a layered approach:
-1. **Redis lock** for initial request validation (fast, distributed)
-2. **Database transaction** with `SELECT FOR UPDATE` for inventory update (ACID guarantees)
-3. **Version checking** as additional safety net
-4. **Queue processing** for background tasks (expiration handling)
+## Performance Optimizations
 
-This multi-layer approach ensures data consistency even under extreme load.
-
-## High Traffic Handling Strategy
-
-### Scalability Measures
-
-#### 1. Horizontal Scaling
-```yaml
-# Multiple backend instances behind load balancer
-api:
-  deploy:
-    replicas: 3  # Scale to N instances
-```
-
-**Benefits:**
-- Distribute load across multiple servers
-- No single point of failure
-- Linear scalability
-
-#### 2. Connection Pooling
+### Connection Pooling
 ```python
-# Database connection pool
 engine = create_async_engine(
     DATABASE_URL,
-    pool_size=20,          # Concurrent connections
-    max_overflow=10,       # Additional connections under load
-    pool_pre_ping=True     # Verify connections
+    pool_size=20,
+    max_overflow=10,
+    pool_pre_ping=True
 )
 ```
 
-**Benefits:**
-- Reuse database connections
-- Reduce connection overhead
-- Handle burst traffic
-
-#### 3. Redis Caching
+### Caching Strategy
 ```python
-# Cache frequently accessed data
-@cache(ttl=300)  # 5 minutes
+@cache(ttl=300)
 async def get_product(product_id: int):
     return await db.query(Product).get(product_id)
 ```
+Reduces DB load by 70-90%. Product details are read-heavy.
 
-**Cached Data:**
-- Product details (read-heavy)
-- User sessions
-- API rate limiting counters
-
-**Benefits:**
-- Reduce database load by 70-90%
-- Sub-millisecond response times
-- Automatic cache invalidation
-
-#### 4. Asynchronous Processing
+### Async Operations
 ```python
-# Non-blocking I/O with async/await
-async def handle_request():
-    # Multiple concurrent operations
-    product, user, inventory = await asyncio.gather(
-        get_product(product_id),
-        get_user(user_id),
-        check_inventory(product_id)
-    )
+product, user, inventory = await asyncio.gather(
+    get_product(product_id),
+    get_user(user_id),
+    check_inventory(product_id)
+)
 ```
+Non-blocking I/O. Better throughput than threading.
 
-**Benefits:**
-- Handle 10,000+ concurrent connections
-- Efficient resource utilization
-- Better throughput than threading
-
-#### 5. Rate Limiting
-```python
-# Prevent abuse and ensure fair usage
-@limiter.limit("100/minute")
-async def create_reservation():
-    pass
-```
-
-**Benefits:**
-- Prevent DDoS attacks
-- Ensure fair resource allocation
-- Protect backend services
-
-#### 6. Database Indexing
+### Database Indexes
 ```sql
--- Optimized queries with indexes
 CREATE INDEX idx_product_stock ON products(id, stock);
 CREATE INDEX idx_reservation_status ON reservations(status, created_at);
 ```
 
-**Benefits:**
-- Fast lookups (O(log n) vs O(n))
-- Efficient filtering and sorting
-- Reduced query execution time
-
-#### 7. Message Queue for Background Tasks
-```python
-# Offload heavy tasks to workers
-await queue.publish(ExpirationCheckTask())
-```
-
-**Benefits:**
-- Non-blocking API responses
-- Automatic retry on failure
-- Scalable worker processes
-
-### Performance Metrics
-Under load testing:
-- **Throughput**: 1,000+ requests/second per instance
-- **Response Time**: <100ms (p95) for cached requests
-- **Concurrent Users**: 10,000+ simultaneous connections
-- **Database Queries**: <50ms average with proper indexing
-
-## Features
-
-- Real-time inventory management
-- Product reservation system with expiration
-- Admin dashboard for managing products, orders, and users
-- Queue-based reservation processing with RabbitMQ
-- Redis caching for high performance
-- PostgreSQL database with async support
-
-## Quick Start with Docker
-
-### Prerequisites
-
-- Docker Desktop installed and running
-- Git (to clone the repository)
-
-### Start Everything
-
-```bash
-# Development mode (with hot-reload)
-docker-compose -f docker-compose.dev.yml up --build
-
-# Production mode
-docker-compose up --build
-```
-
-### Access the Application
-
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:8000
-- **API Docs**: http://localhost:8000/docs
-- **RabbitMQ Management**: http://localhost:15672 (guest/guest)
-
-### Using Helper Scripts
-
-**Windows (PowerShell):**
-```powershell
-# Start development mode
-.\docker-commands.ps1 -Command start-dev
-
-# View logs
-.\docker-commands.ps1 -Command logs -Service frontend
-
-# Stop all services
-.\docker-commands.ps1 -Command stop
-```
-
-**Linux/Mac (Bash):**
-```bash
-# Make script executable
-chmod +x docker-commands.sh
-
-# Start development mode
-./docker-commands.sh start-dev
-
-# View logs
-./docker-commands.sh logs frontend
-
-# Stop all services
-./docker-commands.sh stop
-```
+### Load Test Results
+- 1,000+ req/s per instance
+- <100ms p95 response time (cached)
+- 10,000+ concurrent connections
+- <50ms avg DB query time
 
 ## Project Structure
 
 ```
 .
-├── backend/                 # FastAPI backend
-│   ├── backend/            # Main application code
-│   │   ├── app/           # API endpoints, models, services
-│   │   ├── alembic/       # Database migrations
-│   │   ├── Dockerfile     # Backend container config
-│   │   └── requirements.txt
-│   └── docker-compose.yml  # Backend-specific compose
+├── backend/
+│   └── backend/
+│       ├── app/
+│       │   ├── api/v1/          # Endpoints
+│       │   ├── models/          # SQLAlchemy models
+│       │   ├── services/        # Business logic
+│       │   ├── repositories/    # Data access
+│       │   └── workers/         # Background tasks
+│       ├── alembic/             # Migrations
+│       └── Dockerfile
 │
-├── frontend/               # Next.js frontend
-│   ├── app/               # App router pages
-│   ├── components/        # React components
-│   ├── lib/              # Utilities and API client
-│   ├── Dockerfile        # Production build
-│   ├── Dockerfile.dev    # Development build
-│   └── package.json
+├── frontend/
+│   ├── app/                     # Next.js pages
+│   ├── components/              # React components
+│   ├── lib/
+│   │   ├── api/                 # API client
+│   │   ├── hooks/               # Custom hooks
+│   │   └── types/               # TypeScript types
+│   └── Dockerfile
 │
-├── docker-compose.yml      # Production config
-├── docker-compose.dev.yml  # Development config
-├── docker-commands.ps1     # Windows helper script
-├── docker-commands.sh      # Linux/Mac helper script
-└── README.md              # This file
+├── docker-compose.yml
+└── docker-compose.dev.yml
 ```
-
-## Technology Stack
-
-### Backend
-- FastAPI (Python web framework)
-- PostgreSQL (Database)
-- Redis (Caching)
-- RabbitMQ (Message queue)
-- SQLAlchemy (ORM)
-- Alembic (Migrations)
-
-### Frontend
-- Next.js 15 (React framework)
-- TypeScript
-- Tailwind CSS
-- SWR (Data fetching)
-- React Hook Form
-- Zod (Validation)
 
 ## Development
 
-### Backend Development
+### Running Locally
 
+Development mode with hot-reload:
 ```bash
-# Enter backend container
-docker-compose exec api sh
-
-# Run migrations
-alembic upgrade head
-
-# Create new migration
-alembic revision --autogenerate -m "description"
+docker-compose -f docker-compose.dev.yml up
 ```
 
-### Frontend Development
-
+Production mode:
 ```bash
-# Enter frontend container
-docker-compose exec frontend sh
-
-# Install new package
-npm install package-name
+docker-compose up
 ```
 
-## Common Commands
+### Database Migrations
 
 ```bash
-# Start services (production)
-docker-compose up -d
+# Create migration
+docker-compose exec api alembic revision --autogenerate -m "description"
 
-# Start services (development with hot-reload)
-docker-compose -f docker-compose.dev.yml up -d
+# Apply migrations
+docker-compose exec api alembic upgrade head
 
-# Stop services
-docker-compose down
+# Rollback
+docker-compose exec api alembic downgrade -1
+```
 
-# View logs
+### Logs
+
+```bash
+# All services
 docker-compose logs -f
 
-# View specific service logs
-docker logs inventory_api
-docker logs inventory_frontend
-
-# Rebuild and restart
-docker-compose up -d --build
-
-# Check service status
-docker-compose ps
-
-# Reset database (removes all data)
-docker-compose down -v
-docker-compose up --build
+# Specific service
+docker logs -f inventory_api
+docker logs -f inventory_frontend
 ```
 
-### Using Helper Scripts
+### Helper Scripts
 
-**Windows (PowerShell):**
+Windows:
 ```powershell
-# Start development mode
 .\docker-commands.ps1 -Command start-dev
-
-# View logs
-.\docker-commands.ps1 -Command logs -Service frontend
-
-# Stop all services
+.\docker-commands.ps1 -Command logs -Service api
 .\docker-commands.ps1 -Command stop
 ```
 
-**Linux/Mac (Bash):**
+Linux/Mac:
 ```bash
-# Make script executable (first time only)
-chmod +x docker-commands.sh
-
-# Start development mode
 ./docker-commands.sh start-dev
-
-# View logs
-./docker-commands.sh logs frontend
-
-# Stop all services
+./docker-commands.sh logs api
 ./docker-commands.sh stop
 ```
 
-## Documentation
-
-- [Backend Documentation](backend/README.md) - Backend API details
-- [Frontend Documentation](frontend/README.md) - Frontend architecture
-
 ## Environment Variables
+
+### Backend (.env)
+```env
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/inventory_db
+REDIS_HOST=redis
+REDIS_PORT=6379
+RABBITMQ_HOST=rabbitmq
+RABBITMQ_PORT=5672
+SECRET_KEY=your-secret-key-here
+DEBUG=True
+```
 
 ### Frontend (.env.local)
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 NEXT_PUBLIC_BACKEND_URL=http://localhost:8000
-NEXT_PUBLIC_APP_NAME=Flash Sale System
 NEXT_PUBLIC_RESERVATION_EXPIRY_MINUTES=5
 ```
 
-### Backend (.env)
-```env
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/inventory_db
-REDIS_HOST=localhost
-REDIS_PORT=6379
-RABBITMQ_HOST=localhost
-SECRET_KEY=your-secret-key-here
-```
+## Features
+
+- JWT authentication with refresh tokens
+- Real-time inventory updates
+- Automatic reservation expiration (configurable timeout)
+- Admin dashboard (products, orders, users, analytics)
+- Queue-based checkout processing
+- Redis caching for frequently accessed data
+- Background workers for async tasks
+- Comprehensive API documentation (OpenAPI/Swagger)
 
 ## Troubleshooting
 
-### Port Conflicts
-If ports 3000 or 8000 are already in use:
+**Port already in use:**
 ```bash
-# Windows
-netstat -ano | findstr :3000
+# Find process using port
+netstat -ano | findstr :3000  # Windows
+lsof -i :3000                 # Linux/Mac
 
-# Linux/Mac
-lsof -i :3000
+# Kill process or change port in docker-compose.yml
 ```
 
-### Database Issues
+**Database connection issues:**
 ```bash
-# Reset database
+# Reset everything
 docker-compose down -v
 docker-compose up --build
 ```
 
-### Frontend Build Issues
+**Frontend build fails:**
 ```bash
-# Rebuild without cache
+# Clear cache and rebuild
 docker-compose build --no-cache frontend
+docker-compose up frontend
+```
+
+**Worker not processing tasks:**
+```bash
+# Check RabbitMQ
+docker logs inventory_rabbitmq
+
+# Restart worker
+docker-compose restart worker_expiration
 ```
 
 ## License
 
 MIT
 
-## Support
+## Contributing
 
-For issues and questions, please check the documentation or create an issue in the repository.
+PRs welcome. Please ensure tests pass and follow the existing code style.
+
+For major changes, open an issue first to discuss what you'd like to change.
